@@ -395,7 +395,7 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
     return '<form class="editor" data-form="entry" data-etype="oshi" data-id="' + esc(f.id || "") + '">' +
       '<label for="e-name">推しの名前</label><input id="e-name" name="name" type="text" maxlength="60" autocomplete="off" required value="' + esc(data.name) + '">' +
       '<label for="e-fan">ファンネーム（呼び名）</label><input id="e-fan" name="fanName" type="text" maxlength="40" autocomplete="off" value="' + esc(data.fanName) + '">' +
-      '<label for="e-mark">ファンマーク（アイコンにも使われます）</label><input id="e-mark" name="fanMark" type="text" maxlength="16" autocomplete="off" placeholder="例：🍝🍷" value="' + esc(e ? markOf(e) : "") + '">' +
+      '<label for="e-mark">ファンマーク（アイコンにも使われます）</label><input id="e-mark" name="fanMark" type="text" maxlength="16" autocomplete="off" value="' + esc(e ? markOf(e) : "") + '">' +
       '<label for="e-yt">YouTube（URLか@ID）</label><input id="e-yt" name="youtube" type="text" maxlength="300" autocomplete="off" inputmode="url" value="' + esc(data.youtube) + '">' +
       '<label for="e-x">X（URLか@ID）</label><input id="e-x" name="x" type="text" maxlength="300" autocomplete="off" inputmode="url" value="' + esc(data.x) + '">' +
       '<label for="e-bd">誕生日（例：3/14）</label><input id="e-bd" name="birthday" type="text" maxlength="12" autocomplete="off" value="' + esc((data.birthday || "").replace("-", "/").replace(/^0/, "").replace(/\/0/, "/")) + '">' +
