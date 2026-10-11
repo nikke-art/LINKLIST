@@ -176,6 +176,11 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
 .btn[disabled] { opacity: .35; cursor: default; }
 .btn[disabled]:hover { border-color: var(--line); }
 .btn.on { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border-color: var(--accent); }
+.ptr { position: fixed; left: 50%; top: env(safe-area-inset-top, 0px); margin-left: -18px; width: 36px; height: 36px; border-radius: 50%; background: var(--surface); border: 1px solid var(--line); display: grid; place-items: center; z-index: 10; opacity: 0; transform: translateY(-48px); pointer-events: none; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+.ptr i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--na); display: block; }
+.ptr.spin i { animation: ptrspin .7s linear infinite; }
+@keyframes ptrspin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ptr.spin i { animation-duration: 1.6s !important; } }
 </style>
 
 <div class="wrap"><div id="app"></div></div>
@@ -191,6 +196,7 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
     mark:   { title: "ファンマーク", sub: "", labelName: "使う場面", labelPh: "例：配信コメント", valueName: "ファンマーク", valuePh: "例：🌙✨", empty: "" }
   };
   var state = { entries: [], things: [], loaded: false, view: null, form: null, dirty: false, confirmDel: null, confirmClear: false, reorder: null };
+  var APP_VERSION = "1.1";
   var store = null, toastTimer = null;
 
   function $(s) { return document.querySelector(s); }
@@ -457,7 +463,7 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
     else body = '<div class="cards">' + oshis.map(cardHTML).join("") + "</div>";
     return '<div class="page"><header><h1 class="logo">LINK LIST</h1></header>' + form + noteBanner() +
       '<section><div class="sec-head"><h2>推し</h2><div class="sec-acts">' + sortBtn + (ro ? "" : '<button class="btn small" type="button" data-act="add-entry" data-etype="oshi">＋追加</button>') + "</div></div>" + body + "</section>" +
-      '<p class="foot">' + (store ? (store.kind === "db" ? "変更は自動で保存されます。" : "変更はこのブラウザにだけ保存されます。") : "") + "</p></div>";
+      '<p class="foot">LINK LIST v' + APP_VERSION + (store ? " ・ " + (store.kind === "db" ? "変更は自動で保存されます。" : "変更はこのブラウザにだけ保存されます。") : "") + "</p></div>";
   }
 
   function sectionHTML(e, kind) {
@@ -630,6 +636,39 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
   });
 
   document.addEventListener("focusout", function () { setTimeout(function () { if (state.dirty && !inEditor() && !state.form) render(); }, 0); });
+
+  /* ---------- pull to refresh ---------- */
+  var ptrEl = document.createElement("div");
+  ptrEl.className = "ptr"; ptrEl.setAttribute("aria-hidden", "true"); ptrEl.innerHTML = "<i></i>";
+  document.body.appendChild(ptrEl);
+  var ptr = { y: 0, d: 0, on: false, busy: false };
+  function setPtr(d, anim) {
+    ptrEl.style.transition = anim ? "transform .2s ease, opacity .2s ease" : "none";
+    ptrEl.style.transform = "translateY(" + (d - 48) + "px)";
+    ptrEl.style.opacity = d > 0 ? Math.min(1, d / 56) : 0;
+    ptrEl.firstChild.style.transform = "rotate(" + (d * 5) + "deg)";
+  }
+  function refreshNow() {
+    ptr.busy = true; ptrEl.classList.add("spin"); setPtr(56, true);
+    setTimeout(function () {
+      render(); ptrEl.classList.remove("spin"); setPtr(0, true); ptr.busy = false; toast("更新しました");
+    }, 700);
+  }
+  document.addEventListener("touchstart", function (e) {
+    if (ptr.busy || window.scrollY > 0 || inEditor() || e.touches.length !== 1) { ptr.on = false; return; }
+    ptr.y = e.touches[0].clientY; ptr.d = 0; ptr.on = true;
+  }, { passive: true });
+  document.addEventListener("touchmove", function (e) {
+    if (!ptr.on) return;
+    var d = e.touches[0].clientY - ptr.y;
+    if (d <= 0 || window.scrollY > 0) { ptr.d = 0; setPtr(0); return; }
+    ptr.d = Math.min(d * 0.5, 80); setPtr(ptr.d);
+  }, { passive: true });
+  document.addEventListener("touchend", function () {
+    if (!ptr.on) return;
+    ptr.on = false;
+    if (ptr.d >= 56) refreshNow(); else setPtr(0, true);
+  }, { passive: true });
 
   /* ---------- start ---------- */
   render();
