@@ -181,6 +181,15 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
 .ptr.spin i { animation: ptrspin .7s linear infinite; }
 @keyframes ptrspin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .ptr.spin i { animation-duration: 1.6s !important; } }
+.ghead { background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.gbtn { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; cursor: pointer; padding: 9px 14px; text-align: left; font-size: 13px; font-weight: 700; min-height: 40px; }
+.gbtn:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.chev { width: 14px; color: var(--ink-2); font-size: 12px; flex: none; }
+.gname { min-width: 0; overflow-wrap: anywhere; }
+.gcount { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--ink-2); }
+.search { margin-bottom: 8px; }
+.search input { width: 100%; min-height: 40px; padding: 7px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 14px; }
+.search input:focus-visible { outline-offset: 0; border-color: var(--ink-2); }
 </style>
 
 <div class="wrap"><div id="app"></div></div>
@@ -195,9 +204,11 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
     memory: { title: "思い出リンク", sub: "初ツイートや神回など、残しておきたいもの", labelName: "名前", labelPh: "例：初ツイート", valueName: "URL（なくてもOK）", valuePh: "https://", empty: "まだ思い出がありません。" },
     mark:   { title: "ファンマーク", sub: "", labelName: "使う場面", labelPh: "例：配信コメント", valueName: "ファンマーク", valuePh: "例：🌙✨", empty: "" }
   };
-  var state = { entries: [], things: [], loaded: false, view: null, form: null, dirty: false, confirmDel: null, confirmClear: false, reorder: null };
-  var APP_VERSION = "1.1";
+  var state = { entries: [], things: [], loaded: false, view: null, form: null, dirty: false, confirmDel: null, confirmClear: false, reorder: null, q: "", collapsed: {} };
+  var APP_VERSION = "1.2";
   var store = null, toastTimer = null;
+  try { state.collapsed = JSON.parse(localStorage.getItem("link-list-collapsed") || "{}") || {}; } catch (e) { state.collapsed = {}; }
+  function saveCollapsed() { try { localStorage.setItem("link-list-collapsed", JSON.stringify(state.collapsed)); } catch (e) {} }
 
   function $(s) { return document.querySelector(s); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
@@ -385,6 +396,7 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
       dateField +
       '<label for="f-label">' + K.labelName + '</label><input id="f-label" name="label" type="text" maxlength="60" autocomplete="off" required placeholder="' + esc(K.labelPh) + '" value="' + esc(it && it.label) + '">' +
       '<label for="f-value">' + K.valueName + '</label><input id="f-value" name="value" type="text" maxlength="300" autocomplete="off"' + req + ' placeholder="' + esc(K.valuePh) + '"' + (f.kind === "link" || f.kind === "memory" ? ' inputmode="url"' : "") + ' value="' + esc(it && it.value) + '">' +
+      (f.kind === "link" ? '<label for="f-group">グループ（なくてもOK）</label><input id="f-group" name="group" type="text" maxlength="30" autocomplete="off" list="grp-list" placeholder="例：資料、グッズ" value="' + esc(it && it.group) + '"><datalist id="grp-list">' + groupsOf(f.ownerId).map(function (g) { return '<option value="' + esc(g) + '">'; }).join("") + "</datalist>" : "") +
       (f.kind === "mark" ? "" : '<label for="f-note">メモ（なくてもOK）</label><input id="f-note" name="note" type="text" maxlength="120" autocomplete="off" value="' + esc(it && it.note) + '">') +
       '<p class="err" id="f-err" role="alert" hidden></p>' +
       '<div class="editor-acts"><button class="btn pri" type="submit">保存</button><button class="btn" type="button" data-act="cancel">キャンセル</button>' + del + "</div></form>";
@@ -466,12 +478,42 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
       '<p class="foot">LINK LIST v' + APP_VERSION + (store ? " ・ " + (store.kind === "db" ? "変更は自動で保存されます。" : "変更はこのブラウザにだけ保存されます。") : "") + "</p></div>";
   }
 
+  function groupsOf(owner) {
+    var seen = {}, out = [];
+    thingsOf(owner, "link").forEach(function (it) { if (it.group && !seen[it.group]) { seen[it.group] = 1; out.push(it.group); } });
+    return out;
+  }
+  function linkLisHTML(e) {
+    var f = state.form, all = thingsOf(e.id, "link"), q = state.q.trim().toLowerCase(), lis = [];
+    if (f && f.type === "thing" && f.kind === "link" && !f.id && f.ownerId === e.id) lis.push("<li>" + thingFormHTML(f) + "</li>");
+    var items = q ? all.filter(function (it) { return (it.label + " " + it.value + " " + (it.note || "") + " " + (it.group || "")).toLowerCase().indexOf(q) >= 0; }) : all;
+    function rowLi(it) { return "<li>" + (f && f.type === "thing" && f.id === it.id ? thingFormHTML(f) : thingRow(it)) + "</li>"; }
+    if (!all.some(function (it) { return it.group; })) {
+      items.forEach(function (it) { lis.push(rowLi(it)); });
+    } else {
+      var order = [], map = {};
+      items.forEach(function (it) { var g = it.group || ""; if (!(g in map)) { map[g] = []; order.push(g); } map[g].push(it); });
+      order.sort(function (a, b) { return (a === "" ? 1 : 0) - (b === "" ? 1 : 0); });
+      order.forEach(function (g) {
+        var key = e.id + "|" + g, list = map[g];
+        var col = q ? false : (key in state.collapsed ? state.collapsed[key] : all.length > 8);
+        if (f && f.type === "thing" && f.id && list.some(function (x) { return x.id === f.id; })) col = false;
+        lis.push('<li class="ghead"><button class="gbtn" type="button" data-act="toggle-group" data-key="' + esc(key) + '" aria-expanded="' + (col ? "false" : "true") + '"><span class="chev">' + (col ? "▸" : "▾") + '</span><span class="gname">' + esc(g || "未分類") + '</span><span class="gcount">' + list.length + "</span></button></li>");
+        if (!col) list.forEach(function (it) { lis.push(rowLi(it)); });
+      });
+    }
+    if (!items.length) lis.push('<li class="empty">' + (q ? "見つかりませんでした。" : THING.link.empty) + "</li>");
+    return lis.join("");
+  }
+
   function sectionHTML(e, kind) {
     var K = THING[kind], f = state.form, lis = [], all = thingsOf(e.id, kind);
     var ro = !!(state.reorder && state.reorder.scope === kind && state.reorder.owner === e.id);
     var canSort = kind !== "memory" && all.length > 1;
     if (ro) {
       all.forEach(function (it, i) { lis.push("<li>" + reorderRow(it, kind, e.id, i, all) + "</li>"); });
+    } else if (kind === "link") {
+      lis.push(linkLisHTML(e));
     } else {
       if (f && f.type === "thing" && f.kind === kind && !f.id && f.ownerId === e.id) lis.push("<li>" + thingFormHTML(f) + "</li>");
       all.forEach(function (it) { lis.push("<li>" + (f && f.type === "thing" && f.id === it.id ? thingFormHTML(f) : thingRow(it)) + "</li>"); });
@@ -480,7 +522,7 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
     var copyAll = !ro && kind === "tag" && all.length > 1 ? copyBtn(all.map(function (x) { return x.value; }).join(" "), "まとめてコピー", "small") : "";
     var sortBtn = canSort ? (ro ? '<button class="btn small" type="button" data-act="reorder-off">完了</button>' : '<button class="btn small quiet" type="button" data-act="reorder-on" data-scope="' + kind + '" data-owner="' + esc(e.id) + '">並べ替え</button>') : "";
     return '<section><div class="sec-head"><h2>' + K.title + '</h2><div class="sec-acts">' + copyAll + sortBtn +
-      (ro ? "" : '<button class="btn small" type="button" data-act="add-thing" data-kind="' + kind + '" data-owner="' + esc(e.id) + '">＋追加</button>') + '</div></div><ul class="list">' + lis.join("") + "</ul></section>";
+      (ro ? "" : '<button class="btn small" type="button" data-act="add-thing" data-kind="' + kind + '" data-owner="' + esc(e.id) + '">＋追加</button>') + '</div></div>' + (kind === "link" && !ro && all.length >= 6 ? '<div class="search"><input id="link-q" type="search" placeholder="リンクを検索" autocomplete="off" value="' + esc(state.q) + '"></div>' : "") + '<ul class="list"' + (kind === "link" ? ' id="ul-link"' : "") + ">" + lis.join("") + "</ul></section>";
   }
 
   function infoRow(label, valueHTML, acts) {
@@ -529,7 +571,7 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
   function focusForm() { var el = document.querySelector(".editor input[type=text], .editor textarea"); if (el) el.focus(); }
   function inEditor() { var a = document.activeElement; return !!(state.form && a && a.closest && a.closest(".editor")); }
   function onData(ents, ths) { state.entries = ents; state.things = ths; state.loaded = true; if (inEditor()) { state.dirty = true; return; } render(); }
-  function go(id) { state.view = id; state.form = null; state.confirmDel = null; state.reorder = null; render(); window.scrollTo(0, 0); }
+  function go(id) { state.view = id; state.form = null; state.confirmDel = null; state.reorder = null; state.q = ""; render(); window.scrollTo(0, 0); }
 
   /* ---------- events ---------- */
   function removeMany(list, fn) { return list.reduce(function (p, x) { return p.then(function () { return fn(x.id); }); }, Promise.resolve()); }
@@ -543,6 +585,10 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
     if (act === "reorder-on") { state.form = null; state.reorder = { scope: b.getAttribute("data-scope"), owner: b.getAttribute("data-owner") || "" }; render(); return; }
     if (act === "reorder-off") { state.reorder = null; render(); return; }
     if (act === "move") { moveItem(id, +b.getAttribute("data-dir"), b.getAttribute("data-scope"), b.getAttribute("data-owner") || ""); return; }
+    if (act === "toggle-group") {
+      var gk = b.getAttribute("data-key"), cur = b.getAttribute("aria-expanded") === "false";
+      state.collapsed[gk] = !cur; saveCollapsed(); render(); return;
+    }
     if (act === "pin") { togglePin(id, b.getAttribute("data-scope"), b.getAttribute("data-owner") || ""); return; }
     if (act === "add-color") {
       var list = document.getElementById("color-list");
@@ -592,6 +638,12 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
   /* keep colour picker and hex field in step */
   document.addEventListener("input", function (e) {
     var t = e.target; if (!t.classList) return;
+    if (t.id === "link-q") {
+      state.q = t.value;
+      var ul = document.getElementById("ul-link"), ent = state.view ? entry(state.view) : null;
+      if (ul && ent) ul.innerHTML = linkLisHTML(ent);
+      return;
+    }
     if (t.classList.contains("cpick")) { t.parentNode.querySelector(".chex").value = t.value; }
     else if (t.classList.contains("chex")) { var n = normHex(t.value); if (n) t.parentNode.querySelector(".cpick").value = n; }
   });
@@ -627,7 +679,7 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
       try { new URL(value); } catch (x) { fail("URLの形が正しくないみたい。"); return; }
     }
     if (kind === "tag") { value = "#" + value.replace(/\s+/g, "").replace(/^[#＃]+/, ""); if (value === "#") { fail("タグの文字を入れてね。"); return; } }
-    var td = { ownerId: owner, kind: kind, label: label, value: value, note: note, date: kind === "memory" ? date : "" };
+    var td = { ownerId: owner, kind: kind, label: label, value: value, note: note, date: kind === "memory" ? date : "", group: kind === "link" ? val("group") : "" };
     state.form = null;
     var op;
     if (id) { td.sample = false; op = store.updateThing(id, td); } else { td.sort = Date.now(); op = store.addThing(td); }
