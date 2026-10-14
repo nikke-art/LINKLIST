@@ -154,6 +154,13 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
 .crow .chex { font-family: var(--font-mono); flex: 1 1 auto; min-width: 0; }
 #color-list { display: flex; flex-direction: column; gap: 8px; }
 
+.help { margin: 0; border-top: 1px solid var(--line); padding-top: 10px; }
+.help summary { cursor: pointer; font-size: 12px; color: var(--ink-2); font-weight: 700; list-style: none; }
+.help summary::-webkit-details-marker { display: none; }
+.help summary::before { content: "▸ "; }
+.help[open] summary::before { content: "▾ "; }
+.help ul { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: var(--ink-2); line-height: 1.8; }
+.help b { color: var(--ink); }
 .foot { margin: 0; font-size: 12px; color: var(--ink-2); }
 .toast {
   position: fixed; left: 50%; transform: translateX(-50%);
@@ -190,6 +197,29 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
 .search { margin-bottom: 8px; }
 .search input { width: 100%; min-height: 40px; padding: 7px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 14px; }
 .search input:focus-visible { outline-offset: 0; border-color: var(--ink-2); }
+.gflex { display: flex; align-items: center; }
+.gflex .gbtn { flex: 1 1 auto; min-width: 0; }
+.gadd { border: 0; background: none; cursor: pointer; width: 46px; min-height: 40px; font-size: 18px; color: var(--ink-2); flex: none; }
+.gadd:hover { color: var(--ink); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.ghr { display: flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 13px; font-weight: 700; }
+.ghr .gcount { margin-left: 0; }
+.ghr .acts { margin-left: auto; }
+.gchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.gsug { margin-top: 2px; }
+.editor .gchip { margin: 0; padding: 5px 13px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); cursor: pointer; font-size: 13px; font-weight: 500; color: var(--ink); }
+.editor .gchip.on { background: var(--accent); border-color: var(--accent); color: var(--ac-ink); }
+.editor .gchip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dr { touch-action: pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.dr.dragging { position: relative; z-index: 5; background: var(--surface); box-shadow: 0 8px 24px rgba(0,0,0,.22); border-radius: 12px; }
+.list:has(.dragging) { overflow: visible; }
+.grip { color: var(--ink-2); font-size: 15px; letter-spacing: -3px; cursor: grab; flex: none; width: 14px; text-align: center; line-height: 1; }
+.inner { list-style: none; margin: 0; padding: 0; }
+.inner > li { border-top: 1px solid var(--line); }
+.hint { margin: 0 0 8px; font-size: 12px; color: var(--ink-2); }
+.xrow { display: flex; flex-wrap: wrap; gap: 8px; }
+.xfer textarea { font-family: var(--font-mono); font-size: 12px; line-height: 1.5; word-break: break-all; }
+.xmsg { margin: 4px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+.btn[disabled] { opacity: .35; cursor: default; }
 </style>
 
 <div class="wrap"><div id="app"></div></div>
@@ -204,8 +234,8 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
     memory: { title: "思い出リンク", sub: "初ツイートや神回など、残しておきたいもの", labelName: "名前", labelPh: "例：初ツイート", valueName: "URL（なくてもOK）", valuePh: "https://", empty: "まだ思い出がありません。" },
     mark:   { title: "ファンマーク", sub: "", labelName: "使う場面", labelPh: "例：配信コメント", valueName: "ファンマーク", valuePh: "例：🌙✨", empty: "" }
   };
-  var state = { entries: [], things: [], loaded: false, view: null, form: null, dirty: false, confirmDel: null, confirmClear: false, reorder: null, q: "", collapsed: {} };
-  var APP_VERSION = "1.2";
+  var state = { entries: [], things: [], loaded: false, view: null, form: null, dirty: false, confirmDel: null, confirmClear: false, reorder: null, q: "", collapsed: {}, writing: 0, drag: null, xfer: null };
+  var APP_VERSION = "1.7.0";
   var store = null, toastTimer = null;
   try { state.collapsed = JSON.parse(localStorage.getItem("link-list-collapsed") || "{}") || {}; } catch (e) { state.collapsed = {}; }
   function saveCollapsed() { try { localStorage.setItem("link-list-collapsed", JSON.stringify(state.collapsed)); } catch (e) {} }
@@ -387,6 +417,18 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
       '<div class="acts">' + (it.value ? copyBtn(it.value, "コピー") + openBtn(it.value) : "") + editBtn(it) + "</div></div>";
   }
 
+  function groupFieldHTML(f, it) {
+    var gs = groupsOf(f.ownerId), v = it ? (it.group || "") : (f.group || "");
+    var sug = gs.length ? '<div class="gchips gsug">' + gs.map(function (g) {
+      return '<button class="gchip' + (g === v ? " on" : "") + '" type="button" data-act="pick-group" data-g="' + esc(g) + '">' + esc(g) + "</button>";
+    }).join("") + "</div>" : "";
+    return '<label for="f-group">グループ（なくてもOK）</label><input id="f-group" name="groupNew" type="text" maxlength="30" autocomplete="off" placeholder="例：資料、グッズ" value="' + esc(v) + '">' + sug;
+  }
+  function markGroupChip(v) {
+    v = String(v || "").trim();
+    Array.prototype.forEach.call(document.querySelectorAll(".gsug .gchip"), function (c) { c.classList.toggle("on", c.getAttribute("data-g") === v); });
+  }
+
   function thingFormHTML(f) {
     var K = THING[f.kind], it = f.id ? state.things.filter(function (x) { return x.id === f.id; })[0] : null;
     var del = it ? '<button class="btn quiet danger grow" type="button" data-act="del-thing" data-id="' + esc(it.id) + '">' + (state.confirmDel === it.id ? "本当に削除" : "削除") + "</button>" : "";
@@ -396,7 +438,7 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
       dateField +
       '<label for="f-label">' + K.labelName + '</label><input id="f-label" name="label" type="text" maxlength="60" autocomplete="off" required placeholder="' + esc(K.labelPh) + '" value="' + esc(it && it.label) + '">' +
       '<label for="f-value">' + K.valueName + '</label><input id="f-value" name="value" type="text" maxlength="300" autocomplete="off"' + req + ' placeholder="' + esc(K.valuePh) + '"' + (f.kind === "link" || f.kind === "memory" ? ' inputmode="url"' : "") + ' value="' + esc(it && it.value) + '">' +
-      (f.kind === "link" ? '<label for="f-group">グループ（なくてもOK）</label><input id="f-group" name="group" type="text" maxlength="30" autocomplete="off" list="grp-list" placeholder="例：資料、グッズ" value="' + esc(it && it.group) + '"><datalist id="grp-list">' + groupsOf(f.ownerId).map(function (g) { return '<option value="' + esc(g) + '">'; }).join("") + "</datalist>" : "") +
+      (f.kind === "link" ? groupFieldHTML(f, it) : "") +
       (f.kind === "mark" ? "" : '<label for="f-note">メモ（なくてもOK）</label><input id="f-note" name="note" type="text" maxlength="120" autocomplete="off" value="' + esc(it && it.note) + '">') +
       '<p class="err" id="f-err" role="alert" hidden></p>' +
       '<div class="editor-acts"><button class="btn pri" type="submit">保存</button><button class="btn" type="button" data-act="cancel">キャンセル</button>' + del + "</div></form>";
@@ -409,7 +451,7 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
   function entryFormHTML(f) {
     var e = f.id ? entry(f.id) : null, data = e || {};
     var cols = e ? colorsOf(e) : [DEFAULTS[state.entries.length % 8]];
-    var del = e ? '<button class="btn quiet danger grow" type="button" data-act="del-entry" data-id="' + esc(e.id) + '">' + (state.confirmDel === e.id ? "本当に削除" : "削除") + "</button>" : "";
+    var del = "";
     return '<form class="editor" data-form="entry" data-etype="oshi" data-id="' + esc(f.id || "") + '">' +
       '<label for="e-name">推しの名前</label><input id="e-name" name="name" type="text" maxlength="60" autocomplete="off" required value="' + esc(data.name) + '">' +
       '<label for="e-fan">ファンネーム（呼び名）</label><input id="e-fan" name="fanName" type="text" maxlength="40" autocomplete="off" value="' + esc(data.fanName) + '">' +
@@ -439,7 +481,7 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
   function listFor(scope, owner) { return scope === "home" ? sorted(state.entries) : thingsOf(owner, scope); }
   function updFor(scope, id, patch) { return scope === "home" ? store.updateEntry(id, patch) : store.updateThing(id, patch); }
   function moveItem(id, dir, scope, owner) {
-    var list = listFor(scope, owner), i = list.map(function (x) { return x.id; }).indexOf(id), j = i + dir;
+    var list = scopeList(scope, owner, id), i = list.map(function (x) { return x.id; }).indexOf(id), j = i + dir;
     if (i < 0 || j < 0 || j >= list.length || !!list[i].pin !== !!list[j].pin) return;
     var a = list[i], b = list[j], sa = a.sort || 0, sb = b.sort || 0;
     var p = sa === sb ? updFor(scope, a.id, { sort: sa + (dir > 0 ? 0.5 : -0.5) })
@@ -447,22 +489,31 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
     p.then(null, function () { toast("並べ替えできませんでした"); });
   }
   function togglePin(id, scope, owner) {
-    var list = listFor(scope, owner), it = list.filter(function (x) { return x.id === id; })[0]; if (!it) return;
+    var list = scopeList(scope, owner, id), it = list.filter(function (x) { return x.id === id; })[0]; if (!it) return;
     var patch = { pin: !it.pin };
     if (!it.pin) patch.sort = Math.min.apply(null, list.map(function (x) { return x.sort || 0; })) - 1;
     updFor(scope, id, patch).then(null, function () { toast("固定できませんでした"); });
   }
   function reorderRow(it, scope, owner, i, list) {
-    var up = i > 0 && !!list[i - 1].pin === !!it.pin, down = i < list.length - 1 && !!list[i + 1].pin === !!it.pin;
     var attrs = ' data-id="' + esc(it.id) + '" data-scope="' + scope + '" data-owner="' + esc(owner || "") + '"';
     var body;
     if (scope === "home") body = avatar(it) + '<div class="main"><span class="title">' + esc(it.name) + "</span></div>";
     else if (scope === "tag") body = '<div class="main"><span class="kicker">' + esc(it.label) + '</span><span class="tag">' + esc(it.value) + "</span></div>";
     else body = '<div class="main"><span class="kicker">' + esc(platOf(it.value)) + '</span><span class="title">' + esc(it.label) + "</span></div>";
-    return '<div class="row">' + body + '<div class="acts">' +
-      '<button class="btn small" type="button" data-act="move" data-dir="-1"' + attrs + (up ? "" : " disabled") + ' aria-label="上へ">↑</button>' +
-      '<button class="btn small" type="button" data-act="move" data-dir="1"' + attrs + (down ? "" : " disabled") + ' aria-label="下へ">↓</button>' +
-      '<button class="btn small' + (it.pin ? " on" : "") + '" type="button" data-act="pin"' + attrs + ">" + (it.pin ? "固定中" : "固定") + "</button></div></div>";
+    return '<li class="dr" data-dkind="item" data-dscope="' + scope + '" data-downer="' + esc(owner || "") + '" data-did="' + esc(it.id) + '" data-dgroup="' + esc(scope === "link" ? (it.group || "") : "") + '" data-dpin="' + (it.pin ? 1 : 0) + '">' +
+      '<div class="row"><span class="grip" aria-hidden="true">⋮⋮</span>' + body + '<div class="acts"><button class="btn small' + (it.pin ? " on" : "") + '" type="button" data-act="pin"' + attrs + ">" + (it.pin ? "固定中" : "固定") + "</button>" +
+      (scope === "home" ? '<button class="btn small quiet danger" type="button" data-act="del-entry" data-id="' + esc(it.id) + '">削除</button>' : "") + "</div></div></li>";
+  }
+
+  function helpHTML() {
+    return '<details class="help"><summary>使い方</summary><ul>' +
+      '<li><b>追加</b>：「＋追加」で推しを登録。推しのページでは、ハッシュタグ・リンク・思い出を足せます。</li>' +
+      '<li><b>グループ</b>：リンクには「グループ」を付けられます（引用元など）。検索は上の欄から。</li>' +
+      '<li><b>並べ替え</b>：「並べ替え」を押して、行を長押ししたままドラッグ。「固定」で上に留められます。</li>' +
+      '<li><b>削除</b>：推しは、一覧の「並べ替え」の中の「削除」から（2回押すと消えます）。リンクなどは各行の編集から。</li>' +
+      '<li><b>共有</b>：推しのページの「この推しを共有用にコピー」でコードをコピー。相手は一覧の「読み込む」に貼り付けると同じデータが入ります。コードは先頭の「LL1」から最後まで全部貼ってください。</li>' +
+      '<li><b>文字でコピー</b>：メモアプリなどに貼れる読みやすい文字でコピーします（読み込み用ではありません）。</li>' +
+      '<li><b>更新</b>：画面を下に引っ張ると読み込み直せます。</li></ul></details>';
   }
 
   function homeHTML() {
@@ -471,17 +522,46 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
     var sortBtn = oshis.length > 1 ? (ro ? '<button class="btn small" type="button" data-act="reorder-off">完了</button>' : '<button class="btn small quiet" type="button" data-act="reorder-on" data-scope="home">並べ替え</button>') : "";
     var body;
     if (!oshis.length) body = '<ul class="list"><li class="empty">' + (state.loaded ? "まだ推しがいません。＋追加から入れてね。" : "読み込み中…") + "</li></ul>";
-    else if (ro) body = '<ul class="list">' + oshis.map(function (x, i) { return "<li>" + reorderRow(x, "home", "", i, oshis) + "</li>"; }).join("") + "</ul>";
+    else if (ro) body = '<ul class="list">' + oshis.map(function (x, i) { return reorderRow(x, "home", "", i, oshis); }).join("") + "</ul>";
     else body = '<div class="cards">' + oshis.map(cardHTML).join("") + "</div>";
     return '<div class="page"><header><h1 class="logo">LINK LIST</h1></header>' + form + noteBanner() +
-      '<section><div class="sec-head"><h2>推し</h2><div class="sec-acts">' + sortBtn + (ro ? "" : '<button class="btn small" type="button" data-act="add-entry" data-etype="oshi">＋追加</button>') + "</div></div>" + body + "</section>" +
-      '<p class="foot">LINK LIST v' + APP_VERSION + (store ? " ・ " + (store.kind === "db" ? "変更は自動で保存されます。" : "変更はこのブラウザにだけ保存されます。") : "") + "</p></div>";
+      '<section><div class="sec-head"><h2>推し</h2><div class="sec-acts">' + sortBtn + (ro ? "" : '<button class="btn small" type="button" data-act="add-entry" data-etype="oshi">＋追加</button>') + "</div></div>" + (ro ? '<p class="hint">行を長押しして、動かしたい場所までドラッグします。削除は右のボタンから（2回押すと消えます）。</p>' : "") + body + "</section>" +
+      xferHomeHTML() + helpHTML() + '<p class="foot">LINK LIST v' + APP_VERSION + (store ? " ・ " + (store.kind === "db" ? "変更は自動で保存されます。" : "変更はこのブラウザにだけ保存されます。") : "") + "</p></div>";
   }
 
-  function groupsOf(owner) {
-    var seen = {}, out = [];
-    thingsOf(owner, "link").forEach(function (it) { if (it.group && !seen[it.group]) { seen[it.group] = 1; out.push(it.group); } });
-    return out;
+  function groupOrderOf(e, all) {
+    var names = [], seen = {};
+    all.forEach(function (it) { if (it.group && !seen[it.group]) { seen[it.group] = 1; names.push(it.group); } });
+    var pref = (e.groupOrder || []).filter(function (g) { return seen[g]; });
+    return pref.concat(names.filter(function (g) { return pref.indexOf(g) < 0; }));
+  }
+  function groupsOf(owner) { var e = entry(owner); return e ? groupOrderOf(e, thingsOf(owner, "link")) : []; }
+  function scopeList(scope, owner, id) {
+    var list = listFor(scope, owner);
+    if (scope !== "link") return list;
+    var it = list.filter(function (x) { return x.id === id; })[0], g = it ? (it.group || "") : "";
+    return list.filter(function (x) { return (x.group || "") === g; });
+  }
+  function moveGroup(owner, g, dir) {
+    var e = entry(owner); if (!e) return;
+    var order = groupOrderOf(e, thingsOf(owner, "link")), i = order.indexOf(g), j = i + dir;
+    if (i < 0 || j < 0 || j >= order.length) return;
+    var t = order[i]; order[i] = order[j]; order[j] = t;
+    store.updateEntry(owner, { groupOrder: order }).then(null, function () { toast("並べ替えできませんでした"); });
+  }
+  function linkReorderHTML(e, all) {
+    var order = groupOrderOf(e, all), out = [];
+    function items(g) { return all.filter(function (it) { return (it.group || "") === g; }); }
+    if (!order.length) return items("").map(function (it, i, l) { return reorderRow(it, "link", e.id, i, l); }).join("");
+    order.forEach(function (g) {
+      var list = items(g);
+      out.push('<li class="gblock dr" data-dkind="group" data-dkey="' + esc(g) + '" data-downer="' + esc(e.id) + '"><div class="ghead"><div class="ghr"><span class="grip" aria-hidden="true">⋮⋮</span><span class="gname">' + esc(g) + '</span><span class="gcount">' + list.length + '</span></div></div><ul class="inner">' +
+        list.map(function (it, i) { return reorderRow(it, "link", e.id, i, list); }).join("") + "</ul></li>");
+    });
+    var un = items("");
+    if (un.length) out.push('<li class="gblock"><div class="ghead"><div class="ghr"><span class="gname">未分類</span><span class="gcount">' + un.length + '</span></div></div><ul class="inner">' +
+      un.map(function (it, i) { return reorderRow(it, "link", e.id, i, un); }).join("") + "</ul></li>");
+    return out.join("");
   }
   function linkLisHTML(e) {
     var f = state.form, all = thingsOf(e.id, "link"), q = state.q.trim().toLowerCase(), lis = [];
@@ -491,14 +571,15 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
     if (!all.some(function (it) { return it.group; })) {
       items.forEach(function (it) { lis.push(rowLi(it)); });
     } else {
-      var order = [], map = {};
-      items.forEach(function (it) { var g = it.group || ""; if (!(g in map)) { map[g] = []; order.push(g); } map[g].push(it); });
-      order.sort(function (a, b) { return (a === "" ? 1 : 0) - (b === "" ? 1 : 0); });
+      var map = {};
+      items.forEach(function (it) { var g = it.group || ""; (map[g] = map[g] || []).push(it); });
+      var order = groupOrderOf(e, items).filter(function (g) { return map[g]; });
+      if (map[""]) order.push("");
       order.forEach(function (g) {
         var key = e.id + "|" + g, list = map[g];
         var col = q ? false : (key in state.collapsed ? state.collapsed[key] : all.length > 8);
         if (f && f.type === "thing" && f.id && list.some(function (x) { return x.id === f.id; })) col = false;
-        lis.push('<li class="ghead"><button class="gbtn" type="button" data-act="toggle-group" data-key="' + esc(key) + '" aria-expanded="' + (col ? "false" : "true") + '"><span class="chev">' + (col ? "▸" : "▾") + '</span><span class="gname">' + esc(g || "未分類") + '</span><span class="gcount">' + list.length + "</span></button></li>");
+        lis.push('<li class="ghead gflex"><button class="gbtn" type="button" data-act="toggle-group" data-key="' + esc(key) + '" aria-expanded="' + (col ? "false" : "true") + '"><span class="chev">' + (col ? "▸" : "▾") + '</span><span class="gname">' + esc(g || "未分類") + '</span><span class="gcount">' + list.length + '</span></button><button class="gadd" type="button" data-act="add-thing" data-kind="link" data-owner="' + esc(e.id) + '" data-group="' + esc(g) + '" aria-label="このグループに追加">＋</button></li>');
         if (!col) list.forEach(function (it) { lis.push(rowLi(it)); });
       });
     }
@@ -510,8 +591,10 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
     var K = THING[kind], f = state.form, lis = [], all = thingsOf(e.id, kind);
     var ro = !!(state.reorder && state.reorder.scope === kind && state.reorder.owner === e.id);
     var canSort = kind !== "memory" && all.length > 1;
-    if (ro) {
-      all.forEach(function (it, i) { lis.push("<li>" + reorderRow(it, kind, e.id, i, all) + "</li>"); });
+    if (ro && kind === "link") {
+      lis.push(linkReorderHTML(e, all));
+    } else if (ro) {
+      all.forEach(function (it, i) { lis.push(reorderRow(it, kind, e.id, i, all)); });
     } else if (kind === "link") {
       lis.push(linkLisHTML(e));
     } else {
@@ -522,7 +605,7 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
     var copyAll = !ro && kind === "tag" && all.length > 1 ? copyBtn(all.map(function (x) { return x.value; }).join(" "), "まとめてコピー", "small") : "";
     var sortBtn = canSort ? (ro ? '<button class="btn small" type="button" data-act="reorder-off">完了</button>' : '<button class="btn small quiet" type="button" data-act="reorder-on" data-scope="' + kind + '" data-owner="' + esc(e.id) + '">並べ替え</button>') : "";
     return '<section><div class="sec-head"><h2>' + K.title + '</h2><div class="sec-acts">' + copyAll + sortBtn +
-      (ro ? "" : '<button class="btn small" type="button" data-act="add-thing" data-kind="' + kind + '" data-owner="' + esc(e.id) + '">＋追加</button>') + '</div></div>' + (kind === "link" && !ro && all.length >= 6 ? '<div class="search"><input id="link-q" type="search" placeholder="リンクを検索" autocomplete="off" value="' + esc(state.q) + '"></div>' : "") + '<ul class="list"' + (kind === "link" ? ' id="ul-link"' : "") + ">" + lis.join("") + "</ul></section>";
+      (ro ? "" : '<button class="btn small" type="button" data-act="add-thing" data-kind="' + kind + '" data-owner="' + esc(e.id) + '">＋追加</button>') + '</div></div>' + (ro ? '<p class="hint">行を長押しして、動かしたい場所までドラッグします。</p>' : "") + (kind === "link" && !ro && all.length >= 6 ? '<div class="search"><input id="link-q" type="search" placeholder="リンクを検索" autocomplete="off" value="' + esc(state.q) + '"></div>' : "") + '<ul class="list"' + (kind === "link" ? ' id="ul-link"' : "") + ">" + lis.join("") + "</ul></section>";
   }
 
   function infoRow(label, valueHTML, acts) {
@@ -559,7 +642,7 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
     if (editing) info = "";
     var newForm = f && f.type === "entry" && !f.id ? entryFormHTML(f) : "";
     return '<div class="page has-c" style="' + cvar(e) + '"><div class="top"><button class="btn quiet back" type="button" data-act="home">← LINK LIST</button></div>' + newForm + hero + info +
-      sectionHTML(e, "tag") + sectionHTML(e, "link") + sectionHTML(e, "memory") + "</div>";
+      sectionHTML(e, "tag") + sectionHTML(e, "link") + sectionHTML(e, "memory") + xferEntryHTML(e) + "</div>";
   }
 
   function render() {
@@ -569,9 +652,9 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
     $("#app").innerHTML = e ? entryHTML(e) : homeHTML();
   }
   function focusForm() { var el = document.querySelector(".editor input[type=text], .editor textarea"); if (el) el.focus(); }
-  function inEditor() { var a = document.activeElement; return !!(state.form && a && a.closest && a.closest(".editor")); }
-  function onData(ents, ths) { state.entries = ents; state.things = ths; state.loaded = true; if (inEditor()) { state.dirty = true; return; } render(); }
-  function go(id) { state.view = id; state.form = null; state.confirmDel = null; state.reorder = null; state.q = ""; render(); window.scrollTo(0, 0); }
+  function inEditor() { var a = document.activeElement; return !!((state.form || state.xfer) && a && a.closest && a.closest(".editor")); }
+  function onData(ents, ths) { state.entries = ents; state.things = ths; state.loaded = true; if (inEditor() || state.writing || state.drag) { state.dirty = true; return; } render(); }
+  function go(id) { state.xfer = null; state.view = id; state.form = null; state.confirmDel = null; state.reorder = null; state.q = ""; render(); window.scrollTo(0, 0); }
 
   /* ---------- events ---------- */
   function removeMany(list, fn) { return list.reduce(function (p, x) { return p.then(function () { return fn(x.id); }); }, Promise.resolve()); }
@@ -585,6 +668,32 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
     if (act === "reorder-on") { state.form = null; state.reorder = { scope: b.getAttribute("data-scope"), owner: b.getAttribute("data-owner") || "" }; render(); return; }
     if (act === "reorder-off") { state.reorder = null; render(); return; }
     if (act === "move") { moveItem(id, +b.getAttribute("data-dir"), b.getAttribute("data-scope"), b.getAttribute("data-owner") || ""); return; }
+    if (act === "xfer-export") { startExport([id], false, id); return; }
+    if (act === "xfer-export-all") { startExport(sorted(state.entries).map(function (x) { return x.id; }), true, ""); return; }
+    if (act === "text-export") { copyText(textOf([id])); return; }
+    if (act === "text-export-all") { copyText(textOf(sorted(state.entries).map(function (x) { return x.id; }))); return; }
+    if (act === "xfer-import") { state.xfer = { mode: "import", text: "", parsed: null, msg: "" }; render(); var ti = document.getElementById("imp-text"); if (ti) ti.focus(); return; }
+    if (act === "xfer-close") { state.xfer = null; render(); return; }
+    if (act === "xfer-copy") {
+      var ta = document.getElementById("exp-text"); if (ta) { ta.focus(); ta.select(); try { ta.setSelectionRange(0, ta.value.length); } catch (e) {} }
+      if (state.xfer && state.xfer.code) copyText(state.xfer.code);
+      return;
+    }
+    if (act === "xfer-parse") {
+      var xi = state.xfer, tv = document.getElementById("imp-text"); if (!xi) return;
+      xi.text = tv ? tv.value : xi.text;
+      unpackData(xi.text).then(sanitizeImport).then(function (ents) { xi.parsed = ents; xi.msg = ""; },
+        function (err) { xi.parsed = null; xi.msg = parseMsg(err); })
+        .then(function () { if (state.xfer === xi) render(); });
+      return;
+    }
+    if (act === "xfer-run") { if (state.xfer && state.xfer.parsed) runImport(state.xfer.parsed); return; }
+    if (act === "pick-group") {
+      var gi = document.getElementById("f-group"), gv = b.getAttribute("data-g");
+      if (gi) { gi.value = gi.value.trim() === gv ? "" : gv; markGroupChip(gi.value); }
+      return;
+    }
+    if (act === "move-group") { moveGroup(b.getAttribute("data-owner"), b.getAttribute("data-g"), +b.getAttribute("data-dir")); return; }
     if (act === "toggle-group") {
       var gk = b.getAttribute("data-key"), cur = b.getAttribute("aria-expanded") === "false";
       state.collapsed[gk] = !cur; saveCollapsed(); render(); return;
@@ -605,7 +714,7 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
     if (act === "add-entry") { state.form = { type: "entry", id: null, etype: b.getAttribute("data-etype") }; state.confirmDel = null; render(); focusForm(); return; }
     if (act === "add-member") { state.form = { type: "entry", id: null, etype: "oshi", boxId: id }; render(); focusForm(); return; }
     if (act === "edit-entry") { state.form = { type: "entry", id: id }; state.confirmDel = null; render(); focusForm(); return; }
-    if (act === "add-thing") { state.form = { type: "thing", kind: kind, id: null, ownerId: b.getAttribute("data-owner") }; state.confirmDel = null; render(); focusForm(); return; }
+    if (act === "add-thing") { state.form = { type: "thing", kind: kind, id: null, ownerId: b.getAttribute("data-owner"), group: b.getAttribute("data-group") }; state.confirmDel = null; render(); focusForm(); return; }
     if (act === "edit-thing") {
       var it = state.things.filter(function (x) { return x.id === id; })[0]; if (!it) return;
       state.form = { type: "thing", kind: it.kind, id: id, ownerId: it.ownerId }; state.confirmDel = null; render(); focusForm(); return;
@@ -621,7 +730,9 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
       if (act === "del-thing") { store.removeThing(id).then(function () { toast("削除しました"); }, function () { toast("削除できませんでした"); }); render(); return; }
       var owned = state.things.filter(function (x) { return x.ownerId === id; });
       var kids = state.entries.filter(function (x) { return x.boxId === id; });
+      var keepReorder = !!(state.reorder && state.reorder.scope === "home");
       go(null);
+      if (keepReorder) { state.reorder = { scope: "home", owner: "" }; render(); }
       removeMany(owned, store.removeThing).then(function () { return removeMany(kids, function (k) { return store.updateEntry(k, { boxId: "" }); }); })
         .then(function () { return store.removeEntry(id); }).then(function () { toast("削除しました"); }, function () { toast("削除できませんでした"); });
       return;
@@ -638,6 +749,8 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
   /* keep colour picker and hex field in step */
   document.addEventListener("input", function (e) {
     var t = e.target; if (!t.classList) return;
+    if (t.id === "f-group") { markGroupChip(t.value); return; }
+    if (t.id === "imp-text" && state.xfer) { state.xfer.text = t.value; if (state.xfer.parsed) { state.xfer.parsed = null; } return; }
     if (t.id === "link-q") {
       state.q = t.value;
       var ul = document.getElementById("ul-link"), ent = state.view ? entry(state.view) : null;
@@ -679,7 +792,7 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
       try { new URL(value); } catch (x) { fail("URLの形が正しくないみたい。"); return; }
     }
     if (kind === "tag") { value = "#" + value.replace(/\s+/g, "").replace(/^[#＃]+/, ""); if (value === "#") { fail("タグの文字を入れてね。"); return; } }
-    var td = { ownerId: owner, kind: kind, label: label, value: value, note: note, date: kind === "memory" ? date : "", group: kind === "link" ? val("group") : "" };
+    var td = { ownerId: owner, kind: kind, label: label, value: value, note: note, date: kind === "memory" ? date : "", group: kind === "link" ? val("groupNew") : "" };
     state.form = null;
     var op;
     if (id) { td.sample = false; op = store.updateThing(id, td); } else { td.sort = Date.now(); op = store.addThing(td); }
@@ -687,7 +800,271 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
     render();
   });
 
-  document.addEventListener("focusout", function () { setTimeout(function () { if (state.dirty && !inEditor() && !state.form) render(); }, 0); });
+  document.addEventListener("focusout", function () { setTimeout(function () { if (state.dirty && !inEditor() && !state.form && !state.xfer) render(); }, 0); });
+
+  /* ---------- share code: export / import ---------- */
+  function b64e(bytes) {
+    var bin = ""; for (var i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function b64d(str) {
+    str = str.replace(/-/g, "+").replace(/_/g, "/"); while (str.length % 4) str += "=";
+    var bin = atob(str), out = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out;
+  }
+  async function packData(obj) {
+    var bytes = new TextEncoder().encode(JSON.stringify(obj));
+    if (window.CompressionStream) {
+      try {
+        var cs = new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate"));
+        return "LL1z:" + b64e(new Uint8Array(await new Response(cs).arrayBuffer()));
+      } catch (e) {}
+    }
+    return "LL1:" + b64e(bytes);
+  }
+  function mkErr(code, n) { var e = new Error(code); e.n = n; return e; }
+  async function unpackData(text) {
+    var t = String(text || "").normalize("NFKC").replace(/[\u2010-\u2015\u2212\uFF0D]/g, "-").replace(/\s+/g, "");
+    var m = /(ll1z?):([A-Za-z0-9_\-]+)/i.exec(t);
+    if (!m) throw mkErr("format", t.length);
+    var bytes, n = m[2].length;
+    try { bytes = b64d(m[2]); } catch (e) { throw mkErr("cut", n); }
+    if (m[1].toUpperCase() === "LL1Z") {
+      if (!window.DecompressionStream) throw mkErr("nocomp", n);
+      try {
+        var ds = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate"));
+        bytes = new Uint8Array(await new Response(ds).arrayBuffer());
+      } catch (e) { throw mkErr("cut", n); }
+    }
+    try { return JSON.parse(new TextDecoder().decode(bytes)); } catch (e) { throw mkErr("json", n); }
+  }
+  function textOf(ids) {
+    return ids.map(entry).filter(Boolean).map(function (e) {
+      var L = ["■ " + e.name], m = markOf(e);
+      if (e.fanName) L.push("ファンネーム：" + e.fanName);
+      if (m) L.push("ファンマーク：" + m);
+      if (e.youtube) L.push("YouTube：" + e.youtube);
+      if (e.x) L.push("X：" + e.x);
+      var bd = parseMD(e.birthday), dy = parseYMD(e.debut);
+      if (bd) L.push("誕生日：" + (+bd.slice(0, 2)) + "/" + (+bd.slice(3)));
+      if (dy) L.push("デビュー日：" + dy[0] + "/" + dy[1] + "/" + dy[2]);
+      var tags = thingsOf(e.id, "tag");
+      if (tags.length) { L.push("", "【ハッシュタグ】"); tags.forEach(function (t) { L.push((t.label ? t.label + "：" : "") + t.value); }); }
+      var links = thingsOf(e.id, "link");
+      if (links.length) {
+        L.push("", "【リンク】");
+        var order = groupOrderOf(e, links).concat([""]);
+        order.forEach(function (g) {
+          var part = links.filter(function (t) { return (t.group || "") === g; });
+          if (!part.length) return;
+          if (g) L.push("◆ " + g); else if (order.length > 1) L.push("◆ その他");
+          part.forEach(function (t) { L.push("・" + t.label + "　" + t.value); });
+        });
+      }
+      var mem = thingsOf(e.id, "memory");
+      if (mem.length) { L.push("", "【思い出】"); mem.forEach(function (t) { L.push("・" + (t.date ? t.date.replace(/-0?/g, "/") + "　" : "") + t.label + (t.value ? "　" + t.value : "")); }); }
+      return L.join("\n");
+    }).join("\n\n――――――――\n\n");
+  }
+  function buildExport(ids) {
+    var ents = ids.map(entry).filter(Boolean).map(function (e) {
+      var things = [];
+      ["tag", "link", "memory"].forEach(function (k) {
+        thingsOf(e.id, k).forEach(function (t) { things.push({ kind: k, label: t.label, value: t.value, note: t.note || "", date: t.date || "", group: t.group || "", pin: !!t.pin }); });
+      });
+      return { name: e.name, fanName: e.fanName || "", fanMark: markOf(e), youtube: e.youtube || "", x: e.x || "", birthday: e.birthday || "", debut: e.debut || "",
+        colors: colorsOf(e), memo: e.memo || "", groupOrder: e.groupOrder || [], things: things };
+    });
+    return { v: 1, app: "LINK LIST", entries: ents };
+  }
+  function cs(v, max) { return typeof v === "string" ? v.slice(0, max) : ""; }
+  function cu(v) { v = cs(v, 2000); return /^https?:\/\//i.test(v) ? v : ""; }
+  function sanitizeImport(o) {
+    if (!o || o.v !== 1 || !Array.isArray(o.entries) || !o.entries.length) throw mkErr("shape");
+    return o.entries.slice(0, 200).map(function (e) {
+      e = e || {};
+      var things = (Array.isArray(e.things) ? e.things : []).slice(0, 3000).map(function (t) {
+        t = t || {};
+        var kind = ["tag", "link", "memory"].indexOf(t.kind) >= 0 ? t.kind : "";
+        var value = kind === "tag" ? "#" + cs(t.value, 300).replace(/\s+/g, "").replace(/^[#＃]+/, "") : cu(t.value);
+        if (value === "#") value = "";
+        return { kind: kind, label: cs(t.label, 60), value: value, note: cs(t.note, 120), group: kind === "link" ? cs(t.group, 30) : "",
+          date: /^\d{4}-\d\d-\d\d$/.test(t.date || "") ? t.date : "", pin: !!t.pin };
+      }).filter(function (t) { return t.kind && t.label && (t.kind === "memory" || t.value); });
+      return { name: cs(e.name, 60) || "名前なし", fanName: cs(e.fanName, 40), fanMark: cs(e.fanMark, 16), youtube: cu(e.youtube), x: cu(e.x),
+        birthday: /^\d\d-\d\d$/.test(e.birthday || "") ? e.birthday : "", debut: /^\d{4}-\d\d-\d\d$/.test(e.debut || "") ? e.debut : "",
+        colors: (Array.isArray(e.colors) ? e.colors : []).map(normHex).filter(Boolean).slice(0, 5), memo: cs(e.memo, 200),
+        groupOrder: (Array.isArray(e.groupOrder) ? e.groupOrder : []).map(function (g) { return cs(g, 30); }).filter(Boolean).slice(0, 50), things: things };
+    });
+  }
+  async function runImport(ents) {
+    state.writing++;
+    var ok = true;
+    try {
+      var base = Date.now();
+      for (var i = 0; i < ents.length; i++) {
+        var e = ents[i];
+        var id = await store.addEntry({ type: "oshi", name: e.name, boxId: "", fanName: e.fanName, fanMark: e.fanMark, icon: "", youtube: e.youtube, x: e.x, birthday: e.birthday, debut: e.debut,
+          colors: e.colors.length ? e.colors : [DEFAULTS[(state.entries.length + i) % 8]], memo: e.memo, groupOrder: e.groupOrder, sort: base + i });
+        await Promise.all(e.things.map(function (t, j) {
+          return store.addThing({ ownerId: id, kind: t.kind, label: t.label, value: t.value, note: t.note, date: t.date, group: t.group, pin: t.pin, sort: base + j });
+        }));
+      }
+    } catch (err) { ok = false; }
+    state.writing--; state.xfer = null; render();
+    toast(ok ? ents.length + "人を追加しました" : "読み込めませんでした");
+  }
+  function parseMsg(err) {
+    var c = err && err.message, n = err && err.n;
+    if (c === "format") return "コードが見つかりませんでした。「LL1z:」で始まる文字列を貼り付けてね。（貼り付けた文字数：" + n + "）";
+    if (c === "cut") return "コードが途中で切れているか、文字が変わっているみたいです。もう一度コピーして貼ってね。（読み取れたコード部分：" + n + "文字）";
+    if (c === "nocomp") return "このブラウザでは、この形式のコードを読み込めません。";
+    if (c === "json" || c === "shape") return "コードの中身を読み取れませんでした。LINK LISTで作ったコードか確認してね。";
+    return "読み込めませんでした。";
+  }
+  function xferPanel() {
+    var x = state.xfer; if (!x) return "";
+    if (x.mode === "import") {
+      var pv = "";
+      if (x.parsed) {
+        var n = x.parsed.length, th = x.parsed.reduce(function (a, e) { return a + e.things.length; }, 0);
+        var names = x.parsed.slice(0, 4).map(function (e) { return e.name; }).join("、") + (n > 4 ? " ほか" : "");
+        pv = '<p class="xmsg">' + esc(names) + "（" + n + "人、リンクやタグなど" + th + "件）を追加します。今あるデータは変わりません。</p>";
+      }
+      return '<div class="editor xfer"><label for="imp-text">もらったコードを貼り付け</label><textarea id="imp-text" rows="4" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" placeholder="LL1z:…">' + esc(x.text || "") + "</textarea>" +
+        (x.msg ? '<p class="err" role="alert">' + esc(x.msg) + "</p>" : "") + pv +
+        '<div class="editor-acts">' + (x.parsed ? '<button class="btn pri" type="button" data-act="xfer-run">追加する</button>' : '<button class="btn pri" type="button" data-act="xfer-parse">内容を確認</button>') +
+        '<button class="btn" type="button" data-act="xfer-close">閉じる</button></div></div>';
+    }
+    return '<div class="editor xfer"><label for="exp-text">' + (x.busy ? "作成中…" : "共有用のコード（" + (x.code || "").length + "文字）") + '</label><textarea id="exp-text" rows="4" readonly spellcheck="false">' + esc(x.code || "") + "</textarea>" +
+      '<p class="hint">相手のLINK LISTの「読み込む」に貼り付けると、同じ内容が相手のデータに追加されます。コピーできないときは、枠の中を長押しして、すべて選択してからコピーしてね。</p>' +
+      '<div class="editor-acts"><button class="btn pri" type="button" data-act="xfer-copy"' + (x.code ? "" : " disabled") + '>コピー</button><button class="btn" type="button" data-act="xfer-close">閉じる</button></div></div>';
+  }
+  function xferEntryHTML(e) {
+    var x = state.xfer, open = x && x.mode === "export" && x.id === e.id;
+    return '<section><div class="sec-head"><h2>共有</h2></div>' + (open ? xferPanel() :
+      '<div class="xrow"><button class="btn small" type="button" data-act="xfer-export" data-id="' + esc(e.id) + '">この推しを共有用にコピー</button><button class="btn small quiet" type="button" data-act="text-export" data-id="' + esc(e.id) + '">文字でコピー</button></div>') + "</section>";
+  }
+  function xferHomeHTML() {
+    var x = state.xfer;
+    if (x && (x.mode === "import" || (x.mode === "export" && x.all))) return "<section>" + xferPanel() + "</section>";
+    return '<div class="xrow"><button class="btn small quiet" type="button" data-act="xfer-import">読み込む</button>' + (state.entries.length ? '<button class="btn small quiet" type="button" data-act="xfer-export-all">全部を書き出す</button><button class="btn small quiet" type="button" data-act="text-export-all">全部を文字でコピー</button>' : "") + "</div>";
+  }
+  async function startExport(ids, all, id) {
+    state.xfer = { mode: "export", id: id || "", all: !!all, code: "", busy: true }; render();
+    var x = state.xfer;
+    try { x.code = await packData(buildExport(ids)); } catch (e) { x.code = ""; toast("コードを作れませんでした"); }
+    x.busy = false; if (state.xfer === x) render();
+  }
+
+  /* ---------- drag to reorder (long press on touch, drag on mouse) ---------- */
+  var press = null;
+  function sameKind(a, b) { return b.dataset.dkind === a.dataset.dkind && b.dataset.dgroup === a.dataset.dgroup && b.dataset.dpin === a.dataset.dpin; }
+  function cand(el, dir) {
+    var sib = dir < 0 ? el.previousElementSibling : el.nextElementSibling;
+    return sib && sameKind(el, sib) ? sib : null;
+  }
+  function dragOrder(el) {
+    var d = el.dataset;
+    return Array.prototype.filter.call(el.parentElement.children, function (c) { return sameKind(el, c); })
+      .map(function (c) { return d.dkind === "group" ? c.dataset.dkey : c.dataset.did; });
+  }
+  function dragShift(dr, sib, before) {
+    var el = dr.el, visual = el.getBoundingClientRect().top;
+    el.style.transform = "";
+    sib.parentElement.insertBefore(el, before ? sib : sib.nextSibling);
+    var d2 = visual - el.getBoundingClientRect().top;
+    dr.startY = dr.curY - d2 + (window.scrollY - dr.startScroll);
+    el.style.transform = "translateY(" + d2 + "px)";
+  }
+  function applyDrag() {
+    var dr = state.drag; if (!dr) return;
+    var el = dr.el;
+    el.style.transform = "translateY(" + (dr.curY - dr.startY + (window.scrollY - dr.startScroll)) + "px)";
+    for (var n = 0; n < 4; n++) {
+      var r = el.getBoundingClientRect(), c = r.top + r.height / 2, moved = false;
+      var prev = cand(el, -1), next = cand(el, 1);
+      if (prev) { var pr = prev.getBoundingClientRect(); if (c < pr.top + pr.height / 2) { dragShift(dr, prev, true); moved = true; } }
+      if (!moved && next) { var nr = next.getBoundingClientRect(); if (c > nr.top + nr.height / 2) { dragShift(dr, next, false); moved = true; } }
+      if (!moved) break;
+    }
+  }
+  function dragTick() {
+    var dr = state.drag; if (!dr) return;
+    var y = dr.curY, h = window.innerHeight, v = 0;
+    if (y < 90) v = -Math.ceil((90 - y) / 8); else if (y > h - 90) v = Math.ceil((y - (h - 90)) / 8);
+    if (v) window.scrollBy(0, v);
+    applyDrag();
+    dr.raf = requestAnimationFrame(dragTick);
+  }
+  function beginDrag() {
+    var p = press; if (!p || p.dragging) return;
+    p.dragging = true;
+    state.drag = { el: p.el, before: dragOrder(p.el), startY: p.y, curY: p.y, startScroll: window.scrollY, raf: 0 };
+    p.el.classList.add("dragging");
+    try { if (navigator.vibrate) navigator.vibrate(12); } catch (e) {}
+    dragTick();
+  }
+  function doneWrite() { state.writing--; if (!state.writing) render(); }
+  function commitItems(scope, owner, ids) {
+    var list = listFor(scope, owner), byId = {};
+    list.forEach(function (x) { byId[x.id] = x; });
+    var vals = ids.map(function (id) { return (byId[id] && byId[id].sort) || 0; }).sort(function (a, b) { return a - b; });
+    for (var i = 1; i < vals.length; i++) if (vals[i] <= vals[i - 1]) vals[i] = vals[i - 1] + 0.001;
+    var upd = [];
+    ids.forEach(function (id, i) { if (byId[id] && (byId[id].sort || 0) !== vals[i]) upd.push([id, vals[i]]); });
+    if (!upd.length) return;
+    state.writing++;
+    Promise.all(upd.map(function (u) { return updFor(scope, u[0], { sort: u[1] }); }))
+      .then(null, function () { toast("並べ替えできませんでした"); }).then(doneWrite);
+  }
+  function endDrag() {
+    var dr = state.drag; if (!dr) return;
+    cancelAnimationFrame(dr.raf);
+    var el = dr.el, d = el.dataset;
+    el.style.transform = ""; el.classList.remove("dragging");
+    state.drag = null;
+    var after = dragOrder(el);
+    if (after.join("\u0001") === dr.before.join("\u0001")) { if (state.dirty) render(); return; }
+    if (d.dkind === "group") {
+      state.writing++;
+      store.updateEntry(d.downer, { groupOrder: after }).then(null, function () { toast("並べ替えできませんでした"); }).then(doneWrite);
+    } else commitItems(d.dscope, d.downer, after);
+  }
+  function pressTarget(t) {
+    if (!state.reorder || !t.closest || t.closest("button, a, input, select, textarea")) return null;
+    return t.closest(".dr");
+  }
+  function endPress() {
+    if (!press) return;
+    clearTimeout(press.timer);
+    var was = press.dragging; press = null;
+    if (was) endDrag();
+  }
+  document.addEventListener("touchstart", function (e) {
+    var el = pressTarget(e.target); if (!el || e.touches.length !== 1) return;
+    var t = e.touches[0];
+    press = { el: el, x: t.clientX, y: t.clientY, touch: true, dragging: false, timer: setTimeout(beginDrag, 320) };
+  }, { passive: true });
+  document.addEventListener("touchmove", function (e) {
+    if (!press) return;
+    var t = e.touches[0];
+    if (press.dragging) { e.preventDefault(); state.drag.curY = t.clientY; return; }
+    if (Math.abs(t.clientY - press.y) > 8 || Math.abs(t.clientX - press.x) > 8) { clearTimeout(press.timer); press = null; }
+  }, { passive: false });
+  document.addEventListener("touchend", endPress, { passive: true });
+  document.addEventListener("touchcancel", endPress, { passive: true });
+  document.addEventListener("mousedown", function (e) {
+    if (e.button !== 0) return;
+    var el = pressTarget(e.target); if (!el) return;
+    press = { el: el, x: e.clientX, y: e.clientY, touch: false, dragging: false, timer: 0 };
+  });
+  document.addEventListener("mousemove", function (e) {
+    if (!press || press.touch) return;
+    if (press.dragging) { state.drag.curY = e.clientY; return; }
+    if (Math.abs(e.clientY - press.y) > 4) beginDrag();
+  });
+  document.addEventListener("mouseup", function () { if (press && !press.touch) endPress(); });
+  document.addEventListener("contextmenu", function (e) { if (state.reorder && e.target.closest && e.target.closest(".dr")) e.preventDefault(); });
 
   /* ---------- pull to refresh ---------- */
   var ptrEl = document.createElement("div");
@@ -707,7 +1084,7 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
     }, 700);
   }
   document.addEventListener("touchstart", function (e) {
-    if (ptr.busy || window.scrollY > 0 || inEditor() || e.touches.length !== 1) { ptr.on = false; return; }
+    if (ptr.busy || state.reorder || window.scrollY > 0 || inEditor() || e.touches.length !== 1) { ptr.on = false; return; }
     ptr.y = e.touches[0].clientY; ptr.d = 0; ptr.on = true;
   }, { passive: true });
   document.addEventListener("touchmove", function (e) {
