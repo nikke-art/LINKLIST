@@ -235,7 +235,7 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
     mark:   { title: "ファンマーク", sub: "", labelName: "使う場面", labelPh: "例：配信コメント", valueName: "ファンマーク", valuePh: "例：🌙✨", empty: "" }
   };
   var state = { entries: [], things: [], loaded: false, view: null, form: null, dirty: false, confirmDel: null, confirmClear: false, reorder: null, q: "", collapsed: {}, writing: 0, drag: null, xfer: null };
-  var APP_VERSION = "1.7.0";
+  var APP_VERSION = "1.7.1";
   var store = null, toastTimer = null;
   try { state.collapsed = JSON.parse(localStorage.getItem("link-list-collapsed") || "{}") || {}; } catch (e) { state.collapsed = {}; }
   function saveCollapsed() { try { localStorage.setItem("link-list-collapsed", JSON.stringify(state.collapsed)); } catch (e) {} }
@@ -659,6 +659,9 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
   /* ---------- events ---------- */
   function removeMany(list, fn) { return list.reduce(function (p, x) { return p.then(function () { return fn(x.id); }); }, Promise.resolve()); }
 
+  document.addEventListener("input", function (e) {
+    if (e.target && e.target.id === "imp-text") { var c = document.getElementById("imp-count"); if (c) c.textContent = "貼り付けた文字数：" + e.target.value.trim().length; }
+  });
   document.addEventListener("click", function (e) {
     var b = e.target.closest("[data-act]"); if (!b) return;
     var act = b.getAttribute("data-act"), id = b.getAttribute("data-id"), kind = b.getAttribute("data-kind");
@@ -931,6 +934,7 @@ a.title:hover { text-decoration: underline; text-underline-offset: 3px; }
         pv = '<p class="xmsg">' + esc(names) + "（" + n + "人、リンクやタグなど" + th + "件）を追加します。今あるデータは変わりません。</p>";
       }
       return '<div class="editor xfer"><label for="imp-text">もらったコードを貼り付け</label><textarea id="imp-text" rows="4" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" placeholder="LL1z:…">' + esc(x.text || "") + "</textarea>" +
+        '<p class="hint" id="imp-count">貼り付けた文字数：' + String(x.text || "").trim().length + "</p>" +
         (x.msg ? '<p class="err" role="alert">' + esc(x.msg) + "</p>" : "") + pv +
         '<div class="editor-acts">' + (x.parsed ? '<button class="btn pri" type="button" data-act="xfer-run">追加する</button>' : '<button class="btn pri" type="button" data-act="xfer-parse">内容を確認</button>') +
         '<button class="btn" type="button" data-act="xfer-close">閉じる</button></div></div>';
